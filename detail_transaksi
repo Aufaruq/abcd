@@ -1,0 +1,131 @@
+<?php
+session_start();
+require_once 'define.php';
+
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'kasir')) {
+    header('Location: login.php');
+    exit();
+}
+
+$message = '';
+$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+$pakets = $pdo->query("SELECT id, nama_paket FROM tb_paket")->fetchAll();
+$transaksis = $pdo->query("SELECT id FROM tb_transaksi")->fetchAll();
+
+$action = $_GET['action'] ?? '';
+$id = $_GET['id'] ?? '';
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    $id_transaksi = $_POST['id_transaksi'];
+    $id_paket = $_POST['id_paket'];
+    $qty = $_POST['qty'];
+    $keterangan = $_POST['keterangan'];
+
+    if ($_POST['action'] == 'add') {
+        $stmt = $pdo->prepare("INSERT INTO detail_transaksi (id_transaksi, id_paket, qty, keterangan) VALUES (?, ?, ?, ?)");
+        $result = $stmt->execute([$id_transaksi, $id_paket, $qty, $keterangan]);
+        $message = $result ? 'Detail Transaksi berhasil ditambahkan.' : 'Gagal menambahkan Detail Transaksi.';
+    } elseif ($_POST['action'] == 'edit') {
+        $stmt = $pdo->prepare("UPDATE detail_transaksi SET id_transaksi = ?, id_paket = ?, qty = ?, keterangan = ? WHERE id = ?");
+        $result = $stmt->execute([$id_transaksi, $id_paket, $qty, $keterangan, $_POST['id']]);
+        $message = $result ? 'Detail Transaksi berhasil diperbarui.' : 'Gagal memperbarui Detail Transaksi.';
+    }
+}
+
+if ($action == 'delete' && !empty($id)) {
+    $stmt = $pdo->prepare("DELETE FROM detail_transaksi WHERE id = ?");
+    $result = $stmt->execute([$id]);
+    $message = $result ? 'Detail Transaksi berhasil dihapus.' : 'Gagal menghapus Detail Transaksi.';
+    header("Location: ".$_SERVER['PHP_SELF']);
+    exit();
+}
+
+$editData = [];
+if ($action == 'edit' && !empty($id)) {
+    $stmt = $pdo->prepare("SELECT * FROM detail_transaksi WHERE id = ?");
+    $stmt->execute([$id]);
+    $editData = $stmt->fetch();
+}
+
+$allTransaksi = $pdo->query("SELECT * FROM detail_transaksi")->fetchAll();
+
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detail Transaksi</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="mb-4"><?= empty($editData) ? 'Tambah' : 'Edit' ?> Detail Transaksi</h1>
+        <?php if (!empty($message)) echo "<div class='alert alert-info'>$message</div>"; ?>
+        <form action="" method="post" class="mb-5">
+            <input type="hidden" name="action" value="<?= empty($editData) ? 'add' : 'edit' ?>">
+            <?php if (!empty($editData)): ?>
+                <input type="hidden" name="id" value="<?= $editData['id'] ?>">
+            <?php endif; ?>
+            <div class="form-group">
+                <label for="id_transaksi">Transaksi:</label>
+                <select name="id_transaksi" id="id_transaksi" class="form-control" required>
+                    <?php foreach ($transaksis as $transaksi) : ?>
+                        <option value="<?= $transaksi['id'] ?>" <?= !empty($editData) && $editData['id_transaksi'] == $transaksi['id'] ? 'selected' : '' ?>><?= $transaksi['id'] ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="id_paket">Paket:</label>
+                <select name="id_paket" id="id_paket" class="form-control" required>
+                    <?php foreach ($pakets as $paket) : ?>
+                        <option value="<?= $paket['id'] ?>" <?= !empty($editData) && $editData['id_paket'] == $paket['id'] ? 'selected' : '' ?>><?= $paket['nama_paket'] ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="qty">Jumlah:</label>
+                <input type="number" class="form-control" id="qty" name="qty" required value="<?= $editData['qty'] ?? '' ?>">
+            </div>
+
+            <div class="form-group">
+                <label for="keterangan">Keterangan:</label>
+                <textarea class="form-control" id="keterangan" name="keterangan"><?= $editData['keterangan'] ?? '' ?></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary"><?= empty($editData) ? 'Tambah' : 'Update' ?></button>
+        </form>
+        <button onclick="window.location.href='dashboard.php';" class="btn btn-secondary mb-3">Kembali ke Dashboard</button>
+        <h2>Daftar Detail Transaksi</h2>
+        <table border="1" class="table table-striped">
+            <thead class="thead-dark">
+                <tr>
+                    <th>Id Transaksi</th>
+                    <th>Id Paket</th>
+                    <th>Jumlah</th>
+                    <th>Keterangan</th>
+                    <th>Edit</th>
+                    <th>Hapus</th>
+                </tr>
+            </thead>
+            <tbody>
+               <?php foreach ($allTransaksi as $transaksi): ?>
+                <tr>
+                    <td><?= htmlspecialchars($transaksi['id_transaksi']) ?></td>
+                    <td><?=  ($transaksi['id_paket']) ?></td>
+                    <td><?= htmlspecialchars($transaksi['qty']) ?></td>
+                    <td><?= htmlspecialchars($transaksi['keterangan']) ?></td>
+                    <td><a href="?action=edit&id=<?= $transaksi['id'] ?>" class="btn btn-sm btn-primary"><i class="fas fa-edit"></i> Edit</a>
+                    <td><a href="?action=delete&id=<?= $transaksi['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Yakin ingin menghapus?')"><i class="fas fa-trash-alt"></i> Hapus</a>
+                </tr>
+               <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
